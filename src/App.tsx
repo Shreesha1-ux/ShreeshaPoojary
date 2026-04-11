@@ -1,5 +1,5 @@
 
-import { useState, useEffect, useRef, RefObject } from 'react';
+import { useState, useEffect, useRef, RefObject, FormEvent } from 'react';
 import { motion, AnimatePresence, useScroll, useSpring, useTransform } from 'motion/react';
 import { 
   Github, 
@@ -17,8 +17,11 @@ import {
   GraduationCap,
   Target,
   User,
-  Send
+  Send,
+  CheckCircle,
+  Loader2
 } from 'lucide-react';
+import { supabase } from './lib/supabase';
 
 // Cursor Mascot Component
 const Mascot = () => {
@@ -103,6 +106,8 @@ export default function App() {
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [activeSection, setActiveSection] = useState('home');
   const [showScrollTop, setShowScrollTop] = useState(false);
+  const [formStatus, setFormStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
+  const [formData, setFormData] = useState({ name: '', email: '', message: '' });
   
   const { scrollYProgress } = useScroll();
   const scaleX = useSpring(scrollYProgress, {
@@ -186,6 +191,34 @@ export default function App() {
         duration: 0.5,
         ease: "easeOut"
       }
+    }
+  };
+
+  const handleContactSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    setFormStatus('submitting');
+
+    try {
+      const { error } = await supabase
+        .from('messages')
+        .insert([
+          { 
+            name: formData.name, 
+            email: formData.email, 
+            message: formData.message,
+            created_at: new Date().toISOString()
+          }
+        ]);
+
+      if (error) throw error;
+
+      setFormStatus('success');
+      setFormData({ name: '', email: '', message: '' });
+      setTimeout(() => setFormStatus('idle'), 5000);
+    } catch (error) {
+      console.error('Error sending message:', error);
+      setFormStatus('error');
+      setTimeout(() => setFormStatus('idle'), 5000);
     }
   };
 
@@ -511,7 +544,7 @@ export default function App() {
             whileInView={{ opacity: 1, scale: 1 }}
             viewport={{ once: true }}
             className="grid grid-cols-1 gap-6 text-left" 
-            onSubmit={(e) => e.preventDefault()}
+            onSubmit={handleContactSubmit}
           >
             <div className="grid md:grid-cols-2 gap-6">
               <div className="space-y-3">
@@ -519,8 +552,11 @@ export default function App() {
                 <input
                   type="text"
                   placeholder="John Doe"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   className="w-full px-6 py-4 rounded-2xl bg-zinc-800/50 border border-zinc-700 focus:ring-2 focus:ring-blue-600 outline-none transition-all placeholder:text-zinc-600"
                   required
+                  disabled={formStatus === 'submitting'}
                 />
               </div>
               <div className="space-y-3">
@@ -528,8 +564,11 @@ export default function App() {
                 <input
                   type="email"
                   placeholder="john@example.com"
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   className="w-full px-6 py-4 rounded-2xl bg-zinc-800/50 border border-zinc-700 focus:ring-2 focus:ring-blue-600 outline-none transition-all placeholder:text-zinc-600"
                   required
+                  disabled={formStatus === 'submitting'}
                 />
               </div>
             </div>
@@ -538,17 +577,38 @@ export default function App() {
               <textarea
                 rows={5}
                 placeholder="Your message here..."
+                value={formData.message}
+                onChange={(e) => setFormData({ ...formData, message: e.target.value })}
                 className="w-full px-6 py-4 rounded-2xl bg-zinc-800/50 border border-zinc-700 focus:ring-2 focus:ring-blue-600 outline-none transition-all resize-none placeholder:text-zinc-600"
                 required
+                disabled={formStatus === 'submitting'}
               ></textarea>
             </div>
             <motion.button
               type="submit"
-              className="mt-4 w-full py-5 bg-blue-600 text-white rounded-2xl font-bold text-lg shadow-xl shadow-blue-600/20 flex items-center justify-center gap-3"
-              whileHover={{ scale: 1.02, backgroundColor: "#2563eb" }}
-              whileTap={{ scale: 0.98 }}
+              disabled={formStatus === 'submitting'}
+              className={`mt-4 w-full py-5 rounded-2xl font-bold text-lg shadow-xl flex items-center justify-center gap-3 transition-all ${
+                formStatus === 'success' 
+                  ? 'bg-green-600 shadow-green-600/20' 
+                  : formStatus === 'error'
+                  ? 'bg-red-600 shadow-red-600/20'
+                  : 'bg-blue-600 shadow-blue-600/20'
+              }`}
+              whileHover={formStatus === 'idle' ? { scale: 1.02, backgroundColor: "#2563eb" } : {}}
+              whileTap={formStatus === 'idle' ? { scale: 0.98 } : {}}
             >
-              Send Message <Send className="w-5 h-5" />
+              {formStatus === 'idle' && (
+                <>Send Message <Send className="w-5 h-5" /></>
+              )}
+              {formStatus === 'submitting' && (
+                <>Sending... <Loader2 className="w-5 h-5 animate-spin" /></>
+              )}
+              {formStatus === 'success' && (
+                <>Message Sent! <CheckCircle className="w-5 h-5" /></>
+              )}
+              {formStatus === 'error' && (
+                <>Failed to Send. Try Again</>
+              )}
             </motion.button>
           </motion.form>
         </div>
