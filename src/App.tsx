@@ -196,6 +196,14 @@ export default function App() {
 
   const handleContactSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    
+    if (!supabase) {
+      console.error('Supabase client not initialized. Check environment variables.');
+      setFormStatus('error');
+      setTimeout(() => setFormStatus('idle'), 5000);
+      return;
+    }
+
     setFormStatus('submitting');
 
     try {
