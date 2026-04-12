@@ -1,6 +1,6 @@
 
-import { useState, useEffect, useRef, RefObject, FormEvent } from 'react';
-import { motion, AnimatePresence, useScroll, useSpring, useTransform } from 'motion/react';
+import { useState, useEffect, useRef, RefObject, FormEvent, memo } from 'react';
+import { motion, AnimatePresence, useScroll, useSpring, useTransform, useMotionValue } from 'motion/react';
 import { 
   Github, 
   Linkedin, 
@@ -24,32 +24,60 @@ import {
 import { supabase } from './lib/supabase';
 
 // Cursor Mascot Component
-const Mascot = () => {
-  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+const Mascot = memo(() => {
+  const mouseX = useMotionValue(0);
+  const mouseY = useMotionValue(0);
   const [isHovered, setIsHovered] = useState(false);
   const mascotRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
-      setMousePos({ x: e.clientX, y: e.clientY });
+      mouseX.set(e.clientX);
+      mouseY.set(e.clientY);
     };
     window.addEventListener('mousemove', handleMouseMove);
     return () => window.removeEventListener('mousemove', handleMouseMove);
-  }, []);
+  }, [mouseX, mouseY]);
 
-  const getEyeStyle = (eyeRef: RefObject<HTMLDivElement | null>) => {
-    if (!eyeRef.current) return {};
-    const rect = eyeRef.current.getBoundingClientRect();
-    const centerX = rect.left + rect.width / 2;
-    const centerY = rect.top + rect.height / 2;
-    
-    const angle = Math.atan2(mousePos.y - centerY, mousePos.x - centerX);
-    const distance = Math.min(4, Math.hypot(mousePos.x - centerX, mousePos.y - centerY) / 20);
-    
-    const x = Math.cos(angle) * distance;
-    const y = Math.sin(angle) * distance;
-    
-    return { transform: `translate(${x}px, ${y}px)` };
+  const Eye = ({ eyeRef }: { eyeRef: RefObject<HTMLDivElement | null> }) => {
+    const x = useMotionValue(0);
+    const y = useMotionValue(0);
+    const springX = useSpring(x, { stiffness: 1000, damping: 50 });
+    const springY = useSpring(y, { stiffness: 1000, damping: 50 });
+
+    useEffect(() => {
+      const unsubscribeX = mouseX.on('change', (latestX) => {
+        if (!eyeRef.current) return;
+        const rect = eyeRef.current.getBoundingClientRect();
+        const centerX = rect.left + rect.width / 2;
+        const angle = Math.atan2(mouseY.get() - (rect.top + rect.height / 2), latestX - centerX);
+        const distance = Math.min(4, Math.hypot(latestX - centerX, mouseY.get() - (rect.top + rect.height / 2)) / 20);
+        x.set(Math.cos(angle) * distance);
+      });
+
+      const unsubscribeY = mouseY.on('change', (latestY) => {
+        if (!eyeRef.current) return;
+        const rect = eyeRef.current.getBoundingClientRect();
+        const centerY = rect.top + rect.height / 2;
+        const angle = Math.atan2(latestY - centerY, mouseX.get() - (rect.left + rect.width / 2));
+        const distance = Math.min(4, Math.hypot(mouseX.get() - (rect.left + rect.width / 2), latestY - centerY) / 20);
+        y.set(Math.sin(angle) * distance);
+      });
+
+      return () => {
+        unsubscribeX();
+        unsubscribeY();
+      };
+    }, [eyeRef]);
+
+    return (
+      <div ref={eyeRef} className="w-3 h-3 bg-white rounded-full flex items-center justify-center">
+        <motion.div 
+          className="w-1.5 h-1.5 bg-zinc-900 rounded-full" 
+          style={{ x: springX, y: springY }} 
+        />
+      </div>
+    );
   };
 
   const leftEyeRef = useRef<HTMLDivElement>(null);
@@ -80,30 +108,68 @@ const Mascot = () => {
       </AnimatePresence>
 
       <div className="relative w-12 h-14 bg-blue-600 rounded-2xl shadow-lg flex items-center justify-center gap-2 overflow-hidden">
-        {/* Glow effect */}
         <div className="absolute inset-0 bg-gradient-to-tr from-blue-700 to-blue-400 opacity-50" />
-        
-        {/* Eyes */}
         <div className="flex gap-2 z-10">
-          <div ref={leftEyeRef} className="w-3 h-3 bg-white rounded-full flex items-center justify-center">
-            <div className="w-1.5 h-1.5 bg-zinc-900 rounded-full transition-transform duration-75 ease-out" style={getEyeStyle(leftEyeRef)} />
-          </div>
-          <div ref={rightEyeRef} className="w-3 h-3 bg-white rounded-full flex items-center justify-center">
-            <div className="w-1.5 h-1.5 bg-zinc-900 rounded-full transition-transform duration-75 ease-out" style={getEyeStyle(rightEyeRef)} />
-          </div>
+          <Eye eyeRef={leftEyeRef} />
+          <Eye eyeRef={rightEyeRef} />
         </div>
-        
-        {/* Antenna */}
         <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-1 h-3 bg-blue-600 rounded-full">
           <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-blue-400 rounded-full animate-pulse" />
         </div>
       </div>
     </motion.div>
   );
+});
+
+const navLinks = [
+  { name: 'Home', href: '#home' },
+  { name: 'About', href: '#about' },
+  { name: 'Projects', href: '#projects' },
+  { name: 'Contact', href: '#contact' },
+];
+
+const skills = [
+  { category: 'Languages', items: ['C', 'C++'], icon: <Code2 className="w-5 h-5" /> },
+  { category: 'Frontend', items: ['HTML', 'CSS', 'JavaScript'], icon: <Layout className="w-5 h-5" /> },
+  { category: 'Backend / Database', items: ['Basic SQL', 'Supabase (Learning)'], icon: <Database className="w-5 h-5" /> },
+  { category: 'Tools', items: ['VS Code', 'Git', 'GitHub'], icon: <Wrench className="w-5 h-5" /> },
+];
+
+const projects = [
+  {
+    title: 'Reps',
+    shortDesc: 'A competitive habit-tracking platform designed to build consistency through accountability and competition.',
+    fullDesc: 'Most people fail to stay consistent not because of lack of motivation, but due to lack of accountability. Reps solves this by turning habits into a competitive system. Users can follow others, compete, build streaks, and stay accountable by sharing real progress. It is not just tracking, it is proving consistency.',
+    tech: ['React (Vite)', 'Tailwind CSS', 'Supabase (Auth, Database, Storage)', 'React Router', 'Lucide Icons'],
+    github: 'https://github.com/Shreesha1-ux/reps.git',
+    live: 'https://repsmvp.netlify.app',
+    image: 'https://picsum.photos/seed/fitness-streak/800/600'
+  }
+];
+
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.1
+    }
+  }
+};
+
+const itemVariants = {
+  hidden: { y: 20, opacity: 0 },
+  visible: {
+    y: 0,
+    opacity: 1,
+    transition: {
+      duration: 0.5,
+      ease: "easeOut"
+    }
+  }
 };
 
 export default function App() {
-  const [isDarkMode, setIsDarkMode] = useState(true);
   const [activeSection, setActiveSection] = useState('home');
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [formStatus, setFormStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
@@ -116,83 +182,38 @@ export default function App() {
     restDelta: 0.001
   });
 
-  // Handle theme toggle
+  // Ensure dark mode is always active
   useEffect(() => {
-    if (isDarkMode) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-  }, [isDarkMode]);
+    document.documentElement.classList.add('dark');
+  }, []);
 
   // Handle scroll events
   useEffect(() => {
+    let ticking = false;
     const handleScroll = () => {
-      setShowScrollTop(window.scrollY > 500);
+      if (!ticking) {
+        window.requestAnimationFrame(() => {
+          setShowScrollTop(window.scrollY > 500);
 
-      const sections = ['home', 'about', 'projects', 'contact'];
-      const current = sections.find(section => {
-        const element = document.getElementById(section);
-        if (element) {
-          const rect = element.getBoundingClientRect();
-          return rect.top <= 150 && rect.bottom >= 150;
-        }
-        return false;
-      });
-      if (current) setActiveSection(current);
+          const sections = ['home', 'about', 'projects', 'contact'];
+          const current = sections.find(section => {
+            const element = document.getElementById(section);
+            if (element) {
+              const rect = element.getBoundingClientRect();
+              return rect.top <= 150 && rect.bottom >= 150;
+            }
+            return false;
+          });
+          if (current) setActiveSection(current);
+          ticking = false;
+        });
+        ticking = true;
+      }
     };
 
-    window.addEventListener('scroll', handleScroll);
+    window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
-
-  const navLinks = [
-    { name: 'Home', href: '#home' },
-    { name: 'About', href: '#about' },
-    { name: 'Projects', href: '#projects' },
-    { name: 'Contact', href: '#contact' },
-  ];
-
-  const skills = [
-    { category: 'Languages', items: ['C', 'C++'], icon: <Code2 className="w-5 h-5" /> },
-    { category: 'Frontend', items: ['HTML', 'CSS', 'JavaScript'], icon: <Layout className="w-5 h-5" /> },
-    { category: 'Backend / Database', items: ['Basic SQL', 'Supabase (Learning)'], icon: <Database className="w-5 h-5" /> },
-    { category: 'Tools', items: ['VS Code', 'Git', 'GitHub'], icon: <Wrench className="w-5 h-5" /> },
-  ];
-
-  const projects = [
-    {
-      title: 'Reps',
-      shortDesc: 'A competitive habit-tracking platform designed to build consistency through accountability and competition.',
-      fullDesc: 'Most people fail to stay consistent not because of lack of motivation, but due to lack of accountability. Reps solves this by turning habits into a competitive system. Users can follow others, compete, build streaks, and stay accountable by sharing real progress. It is not just tracking, it is proving consistency.',
-      tech: ['React (Vite)', 'Tailwind CSS', 'Supabase (Auth, Database, Storage)', 'React Router', 'Lucide Icons'],
-      github: 'https://github.com/Shreesha1-ux/reps.git',
-      live: 'https://repsmvp.netlify.app',
-      image: 'https://picsum.photos/seed/fitness-streak/800/600'
-    }
-  ];
-
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    visible: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.1
-      }
-    }
-  };
-
-  const itemVariants = {
-    hidden: { y: 20, opacity: 0 },
-    visible: {
-      y: 0,
-      opacity: 1,
-      transition: {
-        duration: 0.5,
-        ease: "easeOut"
-      }
-    }
-  };
 
   const handleContactSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -231,7 +252,7 @@ export default function App() {
   };
 
   return (
-    <div className={`min-h-screen ${isDarkMode ? 'bg-zinc-950 text-zinc-100' : 'bg-white text-zinc-900'} transition-colors duration-500`}>
+    <div className="min-h-screen bg-zinc-950 text-zinc-100 transition-colors duration-500">
       {/* Progress Bar */}
       <motion.div
         className="fixed top-0 left-0 right-0 h-1 bg-blue-600 z-[60] origin-left"
@@ -241,11 +262,11 @@ export default function App() {
       <Mascot />
 
       {/* Navigation */}
-      <nav className={`fixed top-0 w-full z-50 transition-all duration-500 ${activeSection !== 'home' ? 'backdrop-blur-xl bg-white/70 dark:bg-zinc-950/70 border-b border-zinc-200 dark:border-zinc-800' : ''}`}>
+      <nav className={`fixed top-0 w-full z-50 transition-all duration-500 ${activeSection !== 'home' ? 'backdrop-blur-xl bg-zinc-950/70 border-b border-zinc-800' : ''}`}>
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
           <motion.a 
             href="#home" 
-            className="text-xl font-bold tracking-tighter hover:text-blue-600 transition-colors"
+            className="text-xl font-bold tracking-tighter text-white hover:text-blue-400 transition-colors"
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
           >
@@ -258,7 +279,7 @@ export default function App() {
                 key={link.name}
                 href={link.href}
                 className={`text-sm font-medium transition-colors relative py-1 ${
-                  activeSection === link.href.substring(1) ? 'text-blue-600' : 'text-zinc-500 dark:text-zinc-400 hover:text-blue-600'
+                  activeSection === link.href.substring(1) ? 'text-blue-600' : 'text-zinc-400 hover:text-blue-600'
                 }`}
                 whileHover={{ y: -2 }}
               >
@@ -272,24 +293,6 @@ export default function App() {
                 )}
               </motion.a>
             ))}
-            <motion.button
-              onClick={() => setIsDarkMode(!isDarkMode)}
-              className="p-2.5 rounded-xl bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
-              whileHover={{ rotate: 15, scale: 1.1 }}
-              whileTap={{ scale: 0.9 }}
-              aria-label="Toggle theme"
-            >
-              {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-            </motion.button>
-          </div>
-
-          <div className="md:hidden flex items-center gap-4">
-            <button
-              onClick={() => setIsDarkMode(!isDarkMode)}
-              className="p-2 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-            >
-              {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-            </button>
           </div>
         </div>
       </nav>
@@ -320,7 +323,7 @@ export default function App() {
             Open for Collaboration
           </motion.div>
           
-          <h1 className="text-7xl md:text-9xl font-bold tracking-tight mb-8 leading-[0.9] bg-clip-text text-transparent bg-gradient-to-b from-zinc-950 via-zinc-800 to-zinc-600 dark:from-white dark:via-zinc-200 dark:to-zinc-500">
+          <h1 className="text-7xl md:text-9xl font-bold tracking-tight mb-8 leading-[0.9] bg-clip-text text-transparent bg-gradient-to-b from-zinc-950 to-zinc-800 dark:from-white dark:to-zinc-500">
             Shreesha <br className="hidden md:block" /> Poojary
           </h1>
           
@@ -359,7 +362,7 @@ export default function App() {
       </section>
 
       {/* About Section */}
-      <section id="about" className="py-32 px-6 bg-zinc-50 dark:bg-zinc-900/30">
+      <section id="about" className="py-32 px-6 bg-white dark:bg-zinc-900/30">
         <div className="max-w-7xl mx-auto">
           <div className="grid lg:grid-cols-2 gap-20 items-center">
             <motion.div
@@ -471,7 +474,7 @@ export default function App() {
                 transition={{ duration: 0.7 }}
                 className={`group relative grid lg:grid-cols-12 gap-12 items-center ${index % 2 !== 0 ? 'lg:flex-row-reverse' : ''}`}
               >
-                <div className="lg:col-span-7 relative overflow-hidden rounded-[2.5rem] aspect-video bg-zinc-100 dark:bg-zinc-800 shadow-2xl">
+                <div className="lg:col-span-7 relative overflow-hidden rounded-[2.5rem] aspect-video bg-white dark:bg-zinc-800 shadow-2xl border border-zinc-100 dark:border-zinc-800">
                   <motion.img
                     src={project.image}
                     alt={project.title}
@@ -623,10 +626,10 @@ export default function App() {
       </section>
 
       {/* Footer */}
-      <footer className="py-16 px-6 border-t border-zinc-200 dark:border-zinc-800">
+      <footer className="py-16 px-6 border-t border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-12">
           <div className="text-center md:text-left">
-            <p className="text-2xl font-bold tracking-tighter mb-3">Shreesha.dev</p>
+            <p className="text-2xl font-bold tracking-tighter mb-3 text-white">Shreesha.dev</p>
             <p className="text-zinc-500">© {new Date().getFullYear()} Shreesha Poojary. All rights reserved.</p>
           </div>
 
