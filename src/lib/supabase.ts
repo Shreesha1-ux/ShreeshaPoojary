@@ -1,13 +1,11 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+// Safe fallback credentials so the project works immediately on Vercel/Netlify preview deployments
+const DEFAULT_SUPABASE_URL = 'https://ncugpptsnprphnutnqov.supabase.co';
+const DEFAULT_SUPABASE_ANON_KEY =
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5jdWdwcHRzbnBycGhudXRucW92Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU5MzE2ODksImV4cCI6MjA5MTUwNzY4OX0.mWr7qkUbv4gfQOVt0MTibVJZRMFs1h6_6LNkqWnQgmg';
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.warn('Supabase credentials missing. Contact form will not work until VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are set in your environment variables.');
-}
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || DEFAULT_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || DEFAULT_SUPABASE_ANON_KEY;
 
-// Only initialize if we have a URL, otherwise export a dummy or handle lazily
-export const supabase = supabaseUrl 
-  ? createClient(supabaseUrl, supabaseAnonKey)
-  : null as any;
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
